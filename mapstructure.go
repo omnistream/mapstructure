@@ -24,6 +24,12 @@ type DecodeHookFunc func(
 	to reflect.Kind,
 	data interface{}) (interface{}, error)
 
+// AdvancedDecodeHookFunc is the callback function that can be used for
+// user side field value assignment.
+type AdvancedDecodeHookFunc func(
+	val *reflect.Value,
+	data interface{}) (interface{}, error)
+
 // DecoderConfig is the configuration that is used to create a new decoder
 // and allows customization of various aspects of decoding.
 type DecoderConfig struct {
@@ -34,6 +40,22 @@ type DecoderConfig struct {
 	// If an error is returned, the entire decode will fail with that
 	// error.
 	DecodeHook DecodeHookFunc
+
+	// AdvancedDecodeHook, if set, will be called before any decoding
+	// and before DecodeHook (if it also set). This lets you make
+	// self assignment operation to structure field or can be used for
+	// same purposes as a DecodeHook function (i.e. input value
+	// modification). However in this hook instead to just "Kind" of
+	// acceptor field you will be able to get much more information
+	// about as well as to change it yourself. (for an instance it can
+	// help for a structures like a time.Time - where value can be set
+	// only through type function call)
+	//
+	// If an error is returned, the entire decode will fail with that
+	// error.
+	// If assignement was made inside hook you should return (nil, nil)
+	// as return values to stop following processing.
+	AdvancedDecodeHook AdvancedDecodeHookFunc
 
 	// If ErrorUnused is true, then it is an error for there to exist
 	// keys in the original map that were unused in the decoding process
@@ -158,6 +180,13 @@ func (d *Decoder) decode(name string, data interface{}, val reflect.Value) error
 		// to be the zero value.
 		val.Set(reflect.Zero(val.Type()))
 		return nil
+	}
+
+	if d.config.AdvancedDecodeHook != nil {
+		data, err := d.config.AdvancedDecodeHook(&val, data)
+		if data == nil || err != nil {
+			return err
+		}
 	}
 
 	if d.config.DecodeHook != nil {
