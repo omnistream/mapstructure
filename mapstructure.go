@@ -27,6 +27,7 @@ type DecodeHookFunc func(
 // AdvancedDecodeHookFunc is the callback function that can be used for
 // user side field value assignment.
 type AdvancedDecodeHookFunc func(
+	name string,
 	val *reflect.Value,
 	data interface{}) (interface{}, error)
 
@@ -183,7 +184,7 @@ func (d *Decoder) decode(name string, data interface{}, val reflect.Value) error
 	}
 
 	if d.config.AdvancedDecodeHook != nil {
-		data, err := d.config.AdvancedDecodeHook(&val, data)
+		data, err := d.config.AdvancedDecodeHook(name, &val, data)
 		if data == nil || err != nil {
 			return err
 		}
@@ -223,7 +224,7 @@ func (d *Decoder) decode(name string, data interface{}, val reflect.Value) error
 		err = d.decodeSlice(name, data, val)
 	default:
 		// If we reached this point then we weren't able to decode it
-		return fmt.Errorf("%s: unsupported type: %s", name, dataKind)
+		return fmt.Errorf("%s: unsupported 1 type: %s", name, dataKind)
 	}
 
 	// If we reached here, then we successfully decoded SOMETHING, so
@@ -581,17 +582,31 @@ func (d *Decoder) decodeStruct(name string, data interface{}, val reflect.Value)
 			fieldType := structType.Field(i)
 
 			if fieldType.Anonymous {
+
+				ignore := false
+				tagParts := strings.Split(fieldType.Tag.Get(d.config.TagName), ",")
+				for _, tag := range tagParts[1:] {
+					if tag == "ignore" {
+						ignore = true
+						break
+					}
+				}
+
+				if ignore || len(tagParts) == 0 {
+					continue
+				}
+
 				fieldKind := fieldType.Type.Kind()
 				if fieldKind != reflect.Struct {
 					errors = appendErrors(errors,
-						fmt.Errorf("%s: unsupported type: %s", fieldType.Name, fieldKind))
+						fmt.Errorf("%s: unsupported 2 type: %s", fieldType.Name, fieldKind))
 					continue
 				}
 
 				// We have an embedded field. We "squash" the fields down
 				// if specified in the tag.
 				squash := false
-				tagParts := strings.Split(fieldType.Tag.Get(d.config.TagName), ",")
+				//tagParts := strings.Split(fieldType.Tag.Get(d.config.TagName), ",")
 				for _, tag := range tagParts[1:] {
 					if tag == "squash" {
 						squash = true
